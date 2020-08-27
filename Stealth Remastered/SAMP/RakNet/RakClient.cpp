@@ -5,23 +5,55 @@ CRakClient* pRakClient;
 bool CRakClient::RPC(int uniqueID, BitStream* bitStream, PacketPriority priority, PacketReliability reliability, char orderingChannel, bool shiftTimestamp)
 {
 	Memory::memcpy_safe((void*)(pSAMP->g_dwSAMP_Addr + 0x3A560), "\x55\x8B\xEC\x6A\xFF", 5);
-	return (Prototype_RPC(vTable[25]))(pSAMP->getInfo()->pRakClientInterface, &uniqueID, bitStream, priority, reliability, orderingChannel, shiftTimestamp);
+	return (tRPC(vTable[25]))(pSAMP->getInfo()->pRakClientInterface, &uniqueID, bitStream, priority, reliability, orderingChannel, shiftTimestamp);
 }
 
 bool CRakClient::Send(BitStream* bitStream, PacketPriority priority, PacketReliability reliability, char orderingChannel)
 {
 	Memory::memcpy_safe((void*)(pSAMP->g_dwSAMP_Addr + 0x33DC0), "\x6A\xFF\x68\x6B\x0C\xD1\x03", 7);
 	Memory::memcpy_safe((void*)(pSAMP->g_dwSAMP_Addr + 0x37490), "\x53\x55\x56\x8D\xA9\xE9\x07\x00\x00", 9);
-	return (Prototype_Send(vTable[6]))(pSAMP->getInfo()->pRakClientInterface, bitStream, priority, reliability, orderingChannel);
+	return (tSend(vTable[6]))(pSAMP->getInfo()->pRakClientInterface, bitStream, priority, reliability, orderingChannel);
 }
 
-bool __fastcall CRakClient::Hooked_RPC(void* _this, void* pUnknown, int* uniqueID, BitStream* bitStream, PacketPriority priority, PacketReliability reliability, char orderingChannel, bool shiftTimestamp)
+bool __fastcall CRakClient::hkRPC(void* _this, void* pUnknown, int* uniqueID, BitStream* bitStream, PacketPriority priority, PacketReliability reliability, char orderingChannel, bool shiftTimestamp)
 {
+	if (*uniqueID == 180)
+	{
+		BitStream bsData;
+		uint16_t usIdentifier = 0xCAC;
+		uint32_t dwModVersion = 0x0000A00;
+		uint8_t bSerialData[] = "201AS23oxdA==";
+		uint8_t nSerialLenght = sizeof(bSerialData);
+		bitStream->ResetWritePointer();
+		bitStream->Write(usIdentifier);
+		bitStream->Write(dwModVersion);
+		bitStream->Write(nSerialLenght);
+		bitStream->Write((char*)bSerialData, nSerialLenght);
+	}
+
+	if (*uniqueID == 181)
+		return false;
+
+	if (*uniqueID == 183)
+	{
+		bitStream->SetReadOffset(32);
+		int iSize = bitStream->GetNumberOfBytesUsed() - 4;
+		BYTE szData[26];
+
+		for (int i = 0; i < iSize; i++)
+			bitStream->Read<BYTE>(szData[i]);
+
+		bitStream->Reset();
+		bitStream->Write(0x00);
+
+		for (int i = 0; i < iSize; i++)
+			bitStream->Write<BYTE>(szData[i]);
+	}
+
 	if (*uniqueID == 185)
 	{
 		DWORD dwAddress = 0;
-		BYTE byteSize = 0;
-		BYTE byteContent[4] = {};
+		BYTE byteSize = 0, byteContent[4] = {};
 		bitStream->Read(dwAddress);
 		bitStream->Read(byteSize);
 		for (int i = 0; i < byteSize; i++)
@@ -40,26 +72,6 @@ bool __fastcall CRakClient::Hooked_RPC(void* _this, void* pUnknown, int* uniqueI
 		}
 	}
 
-	if (*uniqueID == 181)
-		return false;
-
-	if (*uniqueID == 183)
-	{
-		bitStream->SetReadOffset(8 * 4);
-		int iSize = bitStream->GetNumberOfBytesUsed() - 4;
-		char szData[26];
-		for (int i = 0; i < iSize; ++i)
-		{
-			uint8_t uchar;
-			bitStream->Read<uint8_t>(uchar);
-			szData[i] = uchar;
-		}
-		bitStream->Reset();
-		bitStream->Write(0x00);
-		for (int i = 0; i < iSize; ++i)
-			bitStream->Write<uint8_t>(szData[i]);
-	}
-
 	if (*uniqueID == RPC_ExitVehicle)
 	{
 		if (g_Config.g_Player.bStopOnExitVehicle && FindPlayerVehicle(-1, false) && FindPlayerVehicle(-1, false)->m_vecMoveSpeed.Magnitude() > 0.40f)
@@ -69,12 +81,12 @@ bool __fastcall CRakClient::Hooked_RPC(void* _this, void* pUnknown, int* uniqueI
 		}
 	}
 
-	return pRakClient->Orginal_RPC(_this, uniqueID, bitStream, priority, reliability, orderingChannel, shiftTimestamp);
+	return pRakClient->oRPC(_this, uniqueID, bitStream, priority, reliability, orderingChannel, shiftTimestamp);
 }
 
-bool __fastcall CRakClient::Hooked_Send(void* _this, void* Unknown, BitStream* bitStream, PacketPriority priority, PacketReliability reliability, char orderingChannel)
+bool __fastcall CRakClient::hkSend(void* _this, void* Unknown, BitStream* bitStream, PacketPriority priority, PacketReliability reliability, char orderingChannel)
 {
-	uint8_t packetId;
+	BYTE packetId;
 	bitStream->Read(packetId);
 
 	bool bEditBulletSync = false;
@@ -111,7 +123,7 @@ bool __fastcall CRakClient::Hooked_Send(void* _this, void* Unknown, BitStream* b
 					if (g_Config.g_Developer.bTeleportToPlayer)
 					{
 						CVector vecPos = CPools::GetPed(pSAMP->getPlayers()->pRemotePlayer[iNearest]->pPlayerData->pSAMP_Actor->ulGTAEntityHandle)->GetPosition();
-						vecPos.fX += 2.f;
+						vecPos.fX += 1.5f;
 						FindPlayerPed()->SetPosn(vecPos);
 					}
 
@@ -350,5 +362,5 @@ bool __fastcall CRakClient::Hooked_Send(void* _this, void* Unknown, BitStream* b
 			break;
 		}
 	}
-	return pRakClient->Orginal_Send(_this, bitStream, priority, reliability, orderingChannel);
+	return pRakClient->oSend(_this, bitStream, priority, reliability, orderingChannel);
 }
